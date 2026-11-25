@@ -1,0 +1,48 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-txt2md}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-txt2md}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-txt2md} -d ${POSTGRES_DB:-txt2md}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  backend:
+    build: ./backend
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-txt2md}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-txt2md}
+      SECRET_KEY: ${SECRET_KEY:?Set SECRET_KEY in .env (at least 32 random characters)}
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+      UPLOAD_DIR: /data/uploads
+      OUTPUT_DIR: /data/outputs
+      MAX_FILE_SIZE_MB: ${MAX_FILE_SIZE_MB:-10}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://localhost:5173}
+      TRUST_PROXY_HEADERS: "true"
+    volumes:
+      - filestore:/data
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "3000:80"
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  filestore:
